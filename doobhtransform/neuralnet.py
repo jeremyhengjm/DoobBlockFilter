@@ -42,7 +42,6 @@ class V_Network(torch.nn.Module):
         input_dimension = dimension_state + dimension_obs
         layers = config["layers"]
         self.standardization = config.get("standardization")
-        self.net = MLP(input_dimension, layer_widths=layers + [1])
         self.net = torch.nn.ModuleList(
             [MLP(input_dimension, layer_widths=layers + [1]) for t in range(num_obs)]
         )
