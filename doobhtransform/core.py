@@ -1,5 +1,5 @@
 """
-A module for the core Doob's h-transform functions.
+A module for Doob's h-transform.
 """
 
 import torch

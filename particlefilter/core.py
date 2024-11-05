@@ -1,5 +1,5 @@
 """
-A module for the core particle filtering functions.
+A module for particle filtering.
 """
 
 import torch
@@ -164,6 +164,7 @@ def simulate_controlled_SMC(
     ess = torch.zeros(T + 1, device=model.device)
     ess[0] = N
     log_norm_const = torch.zeros(T + 1, device=model.device)
+    log_norm_const[0] = -V[0]
     log_ratio_norm_const = -V[0]  # may need to generalize this
 
     # simulate X process
