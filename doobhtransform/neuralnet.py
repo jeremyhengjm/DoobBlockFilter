@@ -39,67 +39,124 @@ class V_Network(torch.nn.Module):
 
     def __init__(self, num_obs, dimension_state, dimension_obs, config):
         super().__init__()
-        input_dimension = dimension_state + dimension_obs
+        if config["full_obs"]:
+            num_input_obs = [(num_obs - t) for t in range(num_obs)]
+        else:
+            num_input_obs = [1] * num_obs
+        input_dimensions = [
+            dimension_state + num * dimension_obs for num in num_input_obs
+        ]
         layers = config["layers"]
+        self.num_input_obs = num_input_obs
         self.standardization = config.get("standardization")
         self.net = torch.nn.ModuleList(
-            [MLP(input_dimension, layer_widths=layers + [1]) for t in range(num_obs)]
+            [MLP(dim, layer_widths=layers + [1]) for dim in input_dimensions]
         )
 
     def forward(self, t, x, y):
-        # t (int), x.shape = (N, d),y.shape=(N, p)
+        # t (int)
+        # x.shape = (N, d)
+        # y.shape=(N, T, p) in doobhtransform
+        # y.shape=(T, p) in particlefilter
+
+        # dimensions
         N = x.shape[0]
+        p = y.shape[-1]
+        q = self.num_input_obs[t]
 
-        if len(y.shape) == 1:
-            y_ = y.repeat((N, 1))
-        else:
-            y_ = y
+        # index input observations
+        idx = torch.arange(t, t + q)
 
+        # handle shape of y argument
+        if len(y.shape) == 2:
+            y_ = y[idx, :].reshape((1, q * p)).repeat((N, 1))  # (N, q * p)
+        if len(y.shape) == 3:
+            y_ = y[:, idx, :].reshape((N, q * p))  # (N, q * p)
+
+        # standardize inputs
         if self.standardization:
             x_c = (x - self.standardization["x_mean"]) / self.standardization["x_std"]
-            y_c = (y_ - self.standardization["y_mean"]) / self.standardization["y_std"]
+            y_c = (
+                y_ - self.standardization["y_mean"].repeat(q)
+            ) / self.standardization["y_std"].repeat(
+                q
+            )  # (N, q * p)
         else:
             x_c = x
-            y_c = y_
+            y_c = y_  # (N, q * p)
 
+        # concat inputs
         h = torch.cat([x_c, y_c], -1)  # size (N, 1+d+p)
+
+        # evaluate neural network
         out = torch.squeeze(self.net[t](h))  # size (N)
+
         return out
 
 
 class Z_Network(torch.nn.Module):
     def __init__(self, num_obs, dimension_state, dimension_obs, config):
         super().__init__()
+        if config["full_obs"]:
+            num_input_obs = [(num_obs - t) for t in range(num_obs)]
+        else:
+            num_input_obs = [1] * num_obs
+        input_dimensions = [
+            dimension_state + num * dimension_obs + 1 for num in num_input_obs
+        ]
         layers = config["layers"]
+        self.num_input_obs = num_input_obs
         self.standardization = config.get("standardization")
-        input_dimension = dimension_state + dimension_obs + 1
         self.net = torch.nn.ModuleList(
             [
-                MLP(input_dimension, layer_widths=layers + [dimension_state])
-                for t in range(num_obs)
+                MLP(dim, layer_widths=layers + [dimension_state])
+                for dim in input_dimensions
             ]
         )
 
     def forward(self, t, s, x, y):
-        # t (int), s.shape = [1], x.shape = (N, d)
+        # t (int)
+        # s.shape = [1]
+        # x.shape = (N, d)
+        # y.shape=(N, T, p) in doobhtransform
+        # y.shape=(T, p) in particlefilter
+
+        # dimensions
         N = x.shape[0]
+        p = y.shape[-1]
+        q = self.num_input_obs[t]
+
+        # index input observations
+        idx = torch.arange(t, t + q)
+
+        # handle shape of s
         if len(s.shape) == 0:
             s_ = s.repeat((N, 1))
         else:
             s_ = s
 
-        if len(y.shape) == 1:
-            y_ = y.repeat((N, 1))
-        else:
-            y_ = y
+        # handle shape of y argument
+        if len(y.shape) == 2:
+            y_ = y[idx, :].reshape((1, q * p)).repeat((N, 1))  # (N, q * p)
+        if len(y.shape) == 3:
+            y_ = y[:, idx, :].reshape((N, q * p))  # (N, q * p)
 
+        # standardize inputs
         if self.standardization:
             x_c = (x - self.standardization["x_mean"]) / self.standardization["x_std"]
-            y_c = (y_ - self.standardization["y_mean"]) / self.standardization["y_std"]
+            y_c = (
+                y_ - self.standardization["y_mean"].repeat(q)
+            ) / self.standardization["y_std"].repeat(
+                q
+            )  # (N, q * p)
         else:
             x_c = x
-            y_c = y_
+            y_c = y_  # (N, q * p)
 
+        # concat inputs
         h = torch.cat([s_, x_c, y_c], -1)
+
+        # evaluate neural network
         out = self.net[t](h)
+
         return out

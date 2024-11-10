@@ -155,7 +155,7 @@ def simulate_controlled_SMC(
     Y = observations
     X = initial_states.repeat(N, 1)
     with torch.no_grad():
-        V = model.V_net(0, X, Y[0, :])
+        V = model.V_net(0, X, Y)
     if full_path:
         states = torch.zeros(N, T * M + 1, d, device=model.device)
     else:
@@ -182,7 +182,7 @@ def simulate_controlled_SMC(
 
             # simulate V process forwards in time
             with torch.no_grad():
-                Z = model.Z_net(t, s, X, Y[t, :])
+                Z = model.Z_net(t, s, X, Y)
             control = -Z.clone()
             drift_V = -0.5 * torch.sum(torch.square(Z), 1)  # size (N)
             euler_V = V + stepsize * drift_V  # size (N)
@@ -202,7 +202,7 @@ def simulate_controlled_SMC(
         else:
             # evaluate V neural network
             with torch.no_grad():
-                V_eval = model.V_net(t + 1, X, Y[t + 1, :])
+                V_eval = model.V_net(t + 1, X, Y)
             log_weights = V + model.obs_log_density(theta, X, Y[t, :]) - V_eval
 
         # normalize weights, compute ESS and normalizing constant

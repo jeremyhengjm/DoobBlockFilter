@@ -70,7 +70,7 @@ class model(torch.nn.Module):
 
         obs_index : observation index (int)
 
-        observations : observations at specified index (p)
+        observations : observations at specified index (N, T, p)
 
         initial_states : initial states of X process (N, d)
 
@@ -159,15 +159,13 @@ class model(torch.nn.Module):
 
         # initialize
         X = X0
-        V = self.V_net(0, X0, Y[:, 0, :])
+        V = self.V_net(0, X0, Y)
         loss_term = torch.zeros(T, device=self.device)
         control_required = False if iteration == 0 and initial_required else True
 
         for t in range(T):
             # simulate X and V processes for unit time
-            X, V = self.simulate_controlled_SDEs(
-                theta, t, Y[:, t, :], X, V, control_required
-            )
+            X, V = self.simulate_controlled_SDEs(theta, t, Y, X, V, control_required)
 
             # compute loss
             if t == (T - 1):
@@ -176,7 +174,7 @@ class model(torch.nn.Module):
                 )
             else:
                 # evaluate V neural network
-                V_eval = self.V_net(t + 1, X, Y[:, t + 1, :])  # check!
+                V_eval = self.V_net(t + 1, X, Y)
                 loss_term[t] = torch.mean(
                     torch.square(
                         V + self.obs_log_density(theta, X, Y[:, t, :]) - V_eval
