@@ -9,7 +9,6 @@ from doobhtransform.utils import resampling
 
 def simulate_uncontrolled_SMC(
     model,
-    theta,
     initial_states,
     observations,
     num_samples,
@@ -22,8 +21,6 @@ def simulate_uncontrolled_SMC(
     Parameters
     ----------
     model : model object
-
-    theta : model parameters
 
     initial_states : initial states of X process (d)
 
@@ -46,7 +43,7 @@ def simulate_uncontrolled_SMC(
 
     # initialize and preallocate
     N = num_samples
-    T = model.T
+    T = observations.shape[0]
     d = model.d
     M = model.M
     Y = observations
@@ -56,9 +53,8 @@ def simulate_uncontrolled_SMC(
     else:
         states = torch.zeros(N, T + 1, d, device=model.device)
     states[:, 0, :] = X
-    ess = torch.zeros(T + 1, device=model.device)
-    ess[0] = N
-    log_norm_const = torch.zeros(T + 1, device=model.device)
+    ess = torch.zeros(T, device=model.device)
+    log_norm_const = torch.zeros(T, device=model.device)
     log_ratio_norm_const = torch.tensor(0.0, device=model.device)
 
     # simulate X process
@@ -75,22 +71,22 @@ def simulate_uncontrolled_SMC(
             )  # size (N, d)
 
             # simulate X process forwards in time
-            euler_X = X + stepsize * model.b(theta, X)
+            euler_X = X + stepsize * model.b(X)
             X = euler_X + model.sigma * W
             if full_path:
                 index = t * M + m + 1
                 states[:, index, :] = X
 
         # compute and normalize weights, compute ESS and normalizing constant
-        log_weights = model.obs_log_density(theta, X, Y[t, :])
+        log_weights = model.obs_log_density(X, Y[t, :])
         max_log_weights = torch.max(log_weights)
         weights = torch.exp(log_weights - max_log_weights)
         normalized_weights = weights / torch.sum(weights)
-        ess[t + 1] = 1.0 / torch.sum(normalized_weights**2)
+        ess[t] = 1.0 / torch.sum(normalized_weights**2)
         log_ratio_norm_const = (
             log_ratio_norm_const + torch.log(torch.mean(weights)) + max_log_weights
         )
-        log_norm_const[t + 1] = log_ratio_norm_const
+        log_norm_const[t] = log_ratio_norm_const
 
         # resampling
         if resample:
@@ -112,7 +108,6 @@ def simulate_uncontrolled_SMC(
 
 def simulate_controlled_SMC(
     model,
-    theta,
     initial_states,
     observations,
     num_samples,
@@ -125,8 +120,6 @@ def simulate_controlled_SMC(
     Parameters
     ----------
     model : model object
-
-    theta : model parameters
 
     initial_states : initial states of X process (d)
 
@@ -161,8 +154,7 @@ def simulate_controlled_SMC(
     else:
         states = torch.zeros(N, T + 1, d, device=model.device)
     states[:, 0, :] = X
-    ess = torch.zeros(T + 1, device=model.device)
-    ess[0] = N
+    ess = torch.zeros(T, device=model.device)
     log_norm_const = torch.zeros(T + 1, device=model.device)
     log_norm_const[0] = -V[0]
     log_ratio_norm_const = -V[0]  # may need to generalize this
@@ -189,7 +181,7 @@ def simulate_controlled_SMC(
             V = euler_V + torch.sum(Z * W, 1)  # size (N)
 
             # simulate X process forwards in time
-            drift_X = model.b(theta, X) + model.sigma * control
+            drift_X = model.b(X) + model.sigma * control
             euler_X = X + stepsize * drift_X
             X = euler_X + model.sigma * W
             if full_path:
@@ -198,18 +190,18 @@ def simulate_controlled_SMC(
 
         # compute log-weights
         if t == (T - 1):
-            log_weights = V + model.obs_log_density(theta, X, Y[t, :])
+            log_weights = V + model.obs_log_density(X, Y[t, :])
         else:
             # evaluate V neural network
             with torch.no_grad():
                 V_eval = model.V_net(t + 1, X, Y)
-            log_weights = V + model.obs_log_density(theta, X, Y[t, :]) - V_eval
+            log_weights = V + model.obs_log_density(X, Y[t, :]) - V_eval
 
         # normalize weights, compute ESS and normalizing constant
         max_log_weights = torch.max(log_weights)
         weights = torch.exp(log_weights - max_log_weights)
         normalized_weights = weights / torch.sum(weights)
-        ess[t + 1] = 1.0 / torch.sum(normalized_weights**2)
+        ess[t] = 1.0 / torch.sum(normalized_weights**2)
         log_ratio_norm_const = (
             log_ratio_norm_const + torch.log(torch.mean(weights)) + max_log_weights
         )

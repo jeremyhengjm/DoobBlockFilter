@@ -54,7 +54,6 @@ class model(torch.nn.Module):
 
     def simulate_controlled_SDEs(
         self,
-        theta,
         obs_index,
         observations,
         initial_states,
@@ -66,8 +65,6 @@ class model(torch.nn.Module):
 
         Parameters
         ----------
-        theta : model parameters
-
         obs_index : observation index (int)
 
         observations : observations at specified index (N, T, p)
@@ -114,7 +111,7 @@ class model(torch.nn.Module):
             V = euler_V + torch.sum(Z * W, 1)  # size (N)
 
             # simulate X process forwards in time
-            drift_X = self.b(theta, X) + self.sigma * control
+            drift_X = self.b(X) + self.sigma * control
             euler_X = X + stepsize * drift_X
             X = euler_X + self.sigma * W
 
@@ -122,7 +119,6 @@ class model(torch.nn.Module):
 
     def loss_function(
         self,
-        theta,
         iteration,
         initial_required,
         minibatch,
@@ -134,8 +130,6 @@ class model(torch.nn.Module):
 
         Parameters
         ----------
-        theta : model parameters
-
         iteration : iteration index (int)
 
         initial_required : flag for whether initialization is required
@@ -165,20 +159,18 @@ class model(torch.nn.Module):
 
         for t in range(T):
             # simulate X and V processes for unit time
-            X, V = self.simulate_controlled_SDEs(theta, t, Y, X, V, control_required)
+            X, V = self.simulate_controlled_SDEs(t, Y, X, V, control_required)
 
             # compute loss
             if t == (T - 1):
                 loss_term[t] = torch.mean(
-                    torch.square(V + self.obs_log_density(theta, X, Y[:, t, :]))
+                    torch.square(V + self.obs_log_density(X, Y[:, t, :]))
                 )
             else:
                 # evaluate V neural network
                 V_eval = self.V_net(t + 1, X, Y)
                 loss_term[t] = torch.mean(
-                    torch.square(
-                        V + self.obs_log_density(theta, X, Y[:, t, :]) - V_eval
-                    )
+                    torch.square(V + self.obs_log_density(X, Y[:, t, :]) - V_eval)
                 )
 
             # update initial values
@@ -188,14 +180,12 @@ class model(torch.nn.Module):
 
         return loss
 
-    def train(self, theta, optim_config):
+    def train(self, optim_config):
         """
         Train approximations iteratively.
 
         Parameters
         ----------
-        theta : model parameters
-
         optim_config : configuration of optimizer
 
         Returns
@@ -223,7 +213,7 @@ class model(torch.nn.Module):
 
             # run forward pass and compute loss
             loss = self.loss_function(
-                theta, i, initial_required, minibatch, initial_states, observations
+                i, initial_required, minibatch, initial_states, observations
             )
 
             # backpropagation
