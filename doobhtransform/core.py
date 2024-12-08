@@ -23,11 +23,11 @@ class model(torch.nn.Module):
         self.initial_generator = state["rinit"]
         self.b = state["drift"]
         self.sigma = state["sigma"]
+        self.interval = state["terminal_time"]
 
         # observations
         self.p = obs["dim"]
         self.T = obs["num_obs"]
-        self.interval = obs["interval"]
         self.obs_generator = obs["robs"]
         self.obs_log_density = obs["log_density"]
 
