@@ -228,3 +228,6 @@ class model(torch.nn.Module):
             loss_values[i] = current_loss
             if (i == 0) or ((i + 1) % 100 == 0):
                 print("Optimization iteration:", i + 1, "Loss:", current_loss)
+
+        # output loss values
+        self.loss = loss_values
