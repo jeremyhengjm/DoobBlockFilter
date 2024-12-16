@@ -149,6 +149,7 @@ def simulate_block_SMC(
         ancestries.append(ancestors)
         current_states = current_states[ancestors, :, :]
         log_auxiliary_weights = log_auxiliary_weights[ancestors]
+        normalized_weights = torch.ones(N) * 1/N
 
     # loop over remaining observations
     for t in range(T_obs - T):
@@ -166,7 +167,8 @@ def simulate_block_SMC(
         #         states[:, -T:, :] = new_states[:, 1:, :]
 
         # importance weighting
-        log_weights = new_log_weights - log_auxiliary_weights
+        log_weights = new_log_weights - log_auxiliary_weights +\
+            torch.log(N * normalized_weights)
         max_log_weights = torch.max(log_weights)
         weights = torch.exp(log_weights - max_log_weights)
         normalized_weights = weights / torch.sum(weights)
@@ -182,6 +184,7 @@ def simulate_block_SMC(
             ancestries.append(ancestors)
             new_states = new_states[ancestors, :, :]
             new_log_auxiliary_weights = new_log_auxiliary_weights[ancestors]
+            normalized_weights = torch.ones(N) * 1/N
 
         # update variables
         current_states = new_states
