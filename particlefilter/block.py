@@ -11,15 +11,14 @@ def _simulate_controlled_SDEs(
     model,
     obs_index,
     observations,
-    initial_states,
-    initial_values,
+    initial_states
 ):
 
     t = obs_index
     Y = observations  # (T, p)
     N = initial_states.shape[0]
     X = initial_states  # size (N, d)
-    V = initial_values  # size (N)
+    V = torch.zeros(N)  # size (N)
     M = model.M
     d = model.d
 
@@ -59,34 +58,25 @@ def _block_proposal_step(
     d = model.d
     Y = observations  # block of observations of size (T, p)
     X = initial_states  # (N, d)
-    with torch.no_grad():
-        V = model.V_net(0, X, Y)
+    V = torch.zeros(N)
     states = torch.zeros(N, T + 1, d, device=model.device)
     states[:, 0, :] = X
     log_weights = -V
+    log_auxiliary_weights = -V
 
     for t in range(T):
         # simulate X and V processes for unit time
-        X, V = _simulate_controlled_SDEs(model, t, Y, X, V)
+        X, V = _simulate_controlled_SDEs(model, t, Y, X)
 
         # compute log-weights
-        if t == (T - 1):
-            log_incremental_weights = V + model.obs_log_density(X, Y[t, :])
-        else:
-            # evaluate V neural network
-            with torch.no_grad():
-                V_eval = model.V_net(t + 1, X, Y)
-            log_incremental_weights = V + model.obs_log_density(X, Y[t, :]) - V_eval
+        log_incremental_weights = V + model.obs_log_density(X, Y[t, :])
         log_weights += log_incremental_weights
 
         # compute log-auxiliary weights
         if t == 0:
-            log_auxiliary_weights = -V_eval
+            pass
         else:
             log_auxiliary_weights += log_incremental_weights
-
-        # update initial values
-        V = V_eval
 
         # store states
         states[:, t + 1, :] = X
